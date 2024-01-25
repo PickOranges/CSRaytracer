@@ -1,0 +1,154 @@
+#pragma kernel CSMain
+
+RWTexture2D<float4> Result;
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+Texture2D _SkyboxTexture;
+SamplerState sampler_SkyboxTexture;
+static const float PI = 3.14159265f;
+
+// To make the sampling uv is either itself, or one of the 8 neighbors of it.
+// This is used for Anti-Aliasing.
+// You'll see the edge is keep jittering.
+float2 _PixelOffset;  
+
+
+struct Ray
+{
+    //float4 origin;
+    //float4 direction;
+    float3 origin;
+    float3 direction;
+    float3 energy; // For ray bouncing.
+};
+
+//Ray CreateRay(float4 origin, float4 direction)
+Ray CreateRay(float3 origin, float3 direction)
+{
+    Ray ray;
+    ray.origin=origin;
+    ray.direction=direction;
+    ray.energy = float3(1.0f, 1.0f, 1.0f);
+    return ray;
+}
+
+Ray CreateCameraRay(float2 uv)
+{
+    //float4 origin=float4(0.0f, 0.0f, 0.0f, 0.1f);
+    //float4 end_point=mul(_CameraInverseProjection, float4(uv, 0, 0.1f));
+    //end_point=mul(_CameraToWorld, end_point);
+    //float4 direction=normalize(end_point-float4(0.0f,0.0f,0.0f,1.0f));
+
+    float3 origin=mul(_CameraToWorld, float4(0,0,0,1.0f)).xyz;
+    float3 direction=mul(_CameraInverseProjection, float4(uv, 0, 0.1f)).xyz;
+    direction=mul(_CameraToWorld, float4(direction, 0.0f)).xyz;
+    direction=normalize(direction);
+    return CreateRay(origin, direction);
+}
+
+struct RayHit
+{
+    float3 position;  // float4(0,0,0,1), be careful when doing matrix multiplication.
+    float distance;
+    float3 normal;
+};
+
+// not finished yet
+RayHit CreateRayHit()
+{
+    RayHit hit;
+    hit.position = float3(0.0f, 0.0f, 0.0f);
+    hit.distance = 1.#INF;
+    hit.normal = float3(0.0f, 0.0f, 0.0f);  // what is this normal?
+    return hit;
+}
+
+// not finished yet
+void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
+{
+    float t = -ray.origin.y / ray.direction.y;  // why neg y?
+
+}
+
+void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere) // sphere has float3 origin and float radius, thus stored in a float4
+{
+    float3 oc=ray.origin-sphere.xyz;
+    float a=dot(ray.direction,ray.direction);
+    float b=2.0*dot(oc,ray.direction);
+    float c=dot(oc,oc)-sphere.w*sphere.w;
+    float discriminant=b*b-4*a*c;
+
+    if(discriminant>0)
+    {
+        float t=(-b-sqrt(discriminant))/(2.0*a);
+        bestHit.position=ray.origin+t*ray.direction;
+        bestHit.normal=normalize(bestHit.position-sphere.xyz);
+        float3 d=normalize(bestHit.position-ray.origin);
+        //bestHit.distance=sqrt(max(0, dot(d,d)));
+        bestHit.distance=sqrt(dot(d,d));
+    }
+}
+
+RayHit Trace(Ray ray, inout RayHit bestHit, float4 sphere)
+{
+    //IntersectGroundPlane(ray, bestHit);
+    IntersectSphere(ray, bestHit, sphere);
+    return bestHit;
+}
+
+// not finished yet
+float3 Shade(inout Ray ray, RayHit hit)
+{
+    //return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
+    return (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
+
+    while(ray.energy>0){
+        
+    }
+
+
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint width, height;
+    Result.GetDimensions(width, height);
+
+    // Transform pixel to [-1,1] range i.e. into clip space
+    //float2 uv = (float2(((id.xy) / float2(width, height)) * 2.0f - 1.0f))*2+1;
+    float2 uv = float2(((id.xy + _PixelOffset) / float2(width, height)) * 2.0f - 1.0f);
+
+    // ray cast
+    Ray ray = CreateCameraRay(uv);
+    //float r=sqrt(pow(ray.direction.x,2) + pow(ray.direction.y,2) + pow(ray.direction.z,2));
+    // Sample the skybox and write it,
+    // also transform them into correct range
+    //float theta = acos(ray.direction.y/r) / -PI;
+    //float theta = acos(ray.direction.y) / -PI;
+    //float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
+    //Result[id.xy] = _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
+
+    RayHit bestHit;
+    Trace(ray, bestHit, float4(0, 3.0f, 0, 10.0f));
+    float3 result = Shade(ray, bestHit);
+    Result[id.xy] = float4(result, 1);
+}
+ 
+
+/*
+    Questions:
+    1. uv why not [0,1]? 
+        - Because here we don't use uv to sample a texture, instead we use uv to generate rays.
+        - But later when we calculate theta and phi, they are both in [0,1].
+    2. skybox range why? [-2,0]? [-0.5, 0.5]? 
+        - No! Both are in the range [0,1].
+*/
+
+/*
+    NOTES:
+    1. clip space-->NDC space: (clip.xy*0.5 + clip.w*0.5) / (0.5*clip.w)
+    2. C# script Matrix4X4 col-major(i.e. store each row into column), shader float4X4 row-major(i.e. as usual matrix).
+    3. Don't remove the comment code, because they could be correct.
+*/
