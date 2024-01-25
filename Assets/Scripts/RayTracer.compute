@@ -90,6 +90,21 @@ void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere) // sphere has
     }
 }
 
+
+void RandomReflectedRayUnit(RayHit hit, inout Ray ray)
+{
+    float3 tmp;
+    tmp.x=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    tmp.y=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    tmp.z=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    tmp=normalize(tmp);
+    
+    ray.origin=hit.position;
+    ray.direction=tmp;
+    if(dot(hit.normal, tmp)<0) ray.direction=-tmp;
+}
+
+
 RayHit Trace(Ray ray, inout RayHit bestHit, float4 sphere)
 {
     //IntersectGroundPlane(ray, bestHit);
@@ -101,13 +116,23 @@ RayHit Trace(Ray ray, inout RayHit bestHit, float4 sphere)
 float3 Shade(inout Ray ray, RayHit hit)
 {
     //return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
-    return (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
+    float3 col= (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
+    return col;
 
+    // reduce the energy of the ray
+    // TODO: add multi-bounce inside
     while(ray.energy>0){
-        
+        ray.energy.x -= 0.125;
+        ray.energy.y -= 0.125;
+        ray.energy.z -= 0.125;
+
+        // TODO: how do you know the next hit?
+        // you have to add recursion here
+        RandomReflectedRayUnit(hit,ray);  
+
+        ray.energy*=col;
     }
-
-
+    
 }
 
 [numthreads(8,8,1)]
