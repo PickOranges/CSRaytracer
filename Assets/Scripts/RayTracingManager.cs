@@ -15,6 +15,9 @@ public class RayTracingManager : MonoBehaviour
     uint _currentSample = 0;
     Material _addMaterial;
 
+    [Range(0,100)]
+    int _numSpheres=10;
+
     private void Awake()
     {
         _camera = GetComponent<Camera>();
@@ -29,6 +32,7 @@ public class RayTracingManager : MonoBehaviour
         _shader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
         _shader.SetTexture(0, "_SkyboxTexture", _skybox);
         _shader.SetVector("_PixelOffset", new Vector2(Random.value, Random.value));  // random range: [0.0, 1.0]
+        _shader.SetInt("_NumSpheres", _numSpheres);
     }
 
     void Start()

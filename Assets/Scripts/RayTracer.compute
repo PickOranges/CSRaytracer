@@ -13,6 +13,8 @@ static const float PI = 3.14159265f;
 // You'll see the edge is keep jittering.
 float2 _PixelOffset;  
 
+int _NumSpheres;
+
 
 struct Ray
 {
@@ -54,20 +56,34 @@ struct RayHit
     float3 normal;
 };
 
-// not finished yet
 RayHit CreateRayHit()
 {
     RayHit hit;
     hit.position = float3(0.0f, 0.0f, 0.0f);
     hit.distance = 1.#INF;
-    hit.normal = float3(0.0f, 0.0f, 0.0f);  // what is this normal?
+    hit.normal = float3(0.0f, 0.0f, 0.0f);  // what is this normal? i.e. normal of the hit surface
     return hit;
 }
 
-// not finished yet
+
 void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
 {
-    float t = -ray.origin.y / ray.direction.y;  // why neg y?
+    // Assumption: the given ground is parallel to {world} XOZ plane, 
+    // and thus the equation of this plane is y=0, w.r.t. {world} frame.
+
+    // Calculate distance along the ray where the ground plane is intersected
+    // Explain: suppose the hit point is p, thus p=(xp, 0, zp),
+    // We can write equation: p=r(t)=o+d*t (i.e. point is on the ray).
+    // And we only have one unknown to calculate, that is t,
+    // Thus we use the equation: 0=o.y + d.y*t, thus d.y * t = -o.y.
+    // Thus t=... as following.
+    float t = -ray.origin.y / ray.direction.y;
+    if (t > 0 && t < bestHit.distance)
+    {
+        bestHit.distance = t;
+        bestHit.position = ray.origin + t * ray.direction;
+        bestHit.normal = float3(0.0f, 1.0f, 0.0f);
+    }
 
 }
 
@@ -78,25 +94,23 @@ void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere) // sphere has
     float b=2.0*dot(oc,ray.direction);
     float c=dot(oc,oc)-sphere.w*sphere.w;
     float discriminant=b*b-4*a*c;
-
-    if(discriminant>0)
-    {
-        float t=(-b-sqrt(discriminant))/(2.0*a);
-        bestHit.position=ray.origin+t*ray.direction;
-        bestHit.normal=normalize(bestHit.position-sphere.xyz);
-        float3 d=normalize(bestHit.position-ray.origin);
-        //bestHit.distance=sqrt(max(0, dot(d,d)));
-        bestHit.distance=sqrt(dot(d,d));
-    }
+    if(discriminant<0) return;
+    
+    float t=(-b-sqrt(discriminant))/(2.0*a);
+    bestHit.position=ray.origin+t*ray.direction;
+    bestHit.normal=normalize(bestHit.position-sphere.xyz);
+    float3 d=normalize(bestHit.position-ray.origin);
+    //bestHit.distance=sqrt(max(0, dot(d,d)));
+    bestHit.distance=sqrt(dot(d,d));
 }
 
 
 void RandomReflectedRayUnit(RayHit hit, inout Ray ray)
 {
     float3 tmp;
-    tmp.x=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
-    tmp.y=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
-    tmp.z=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    //tmp.x=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    //tmp.y=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
+    //tmp.z=frac(sin(dot(uv,float2(12.9898,78.233)))*43758.5453123);
     tmp=normalize(tmp);
     
     ray.origin=hit.position;
@@ -105,10 +119,20 @@ void RandomReflectedRayUnit(RayHit hit, inout Ray ray)
 }
 
 
-RayHit Trace(Ray ray, inout RayHit bestHit, float4 sphere)
+RayHit Trace(Ray ray)
 {
-    //IntersectGroundPlane(ray, bestHit);
-    IntersectSphere(ray, bestHit, sphere);
+    RayHit bestHit = CreateRayHit();
+
+    // Trace ground plane
+    IntersectGroundPlane(ray, bestHit);
+
+    // Try to check every spheres in the scene, find the nearest hit point.
+    uint numSpheres = _NumSpheres;
+    for (uint i = 0; i < numSpheres; i++)
+    {
+        IntersectSphere(ray, bestHit, float4(1.0f, 0.0, i*2, 1.5));
+    }
+        
     return bestHit;
 }
 
@@ -116,23 +140,34 @@ RayHit Trace(Ray ray, inout RayHit bestHit, float4 sphere)
 float3 Shade(inout Ray ray, RayHit hit)
 {
     //return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
-    float3 col= (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
-    return col;
+    //float3 col= (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
+    //return col;
+    if (hit.distance < 1.#INF)
+    {
+        float3 specular = float3(0.6f, 0.6f, 0.6f);
 
-    // reduce the energy of the ray
-    // TODO: add multi-bounce inside
-    while(ray.energy>0){
-        ray.energy.x -= 0.125;
-        ray.energy.y -= 0.125;
-        ray.energy.z -= 0.125;
+        // Reflect the ray and multiply energy with specular reflection
+        // the reflected ray's origin. But why the small displacement ???
+        // - Notice that we add a slight offset to the normal direction. 
+        // - This is to fix floating point inaccuracy, as it is possible for a reflected ray to be blocked by the surface it is being reflected by.
+        ray.origin = hit.position + hit.normal * 0.001f;    
+        ray.direction = reflect(ray.direction, hit.normal);  // This function is from DX11/HLSL, details see MSDN.
+        ray.energy *= specular;
 
-        // TODO: how do you know the next hit?
-        // you have to add recursion here
-        RandomReflectedRayUnit(hit,ray);  
-
-        ray.energy*=col;
+        //return saturate(float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction)) + ray.energy);  
+        return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
     }
-    
+    else
+    {
+        // Erase the ray's energy - the sky doesn't reflect anything
+        //ray.energy = 0.0f;
+
+        return float3(0.0f, 0.0f, 0.0f);
+        // Sample the skybox and write it
+        //float theta = acos(ray.direction.y) / -PI;
+        //float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
+        //return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
+    }
 }
 
 [numthreads(8,8,1)]
@@ -142,22 +177,27 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Result.GetDimensions(width, height);
 
     // Transform pixel to [-1,1] range i.e. into clip space
-    //float2 uv = (float2(((id.xy) / float2(width, height)) * 2.0f - 1.0f))*2+1;
-    float2 uv = float2(((id.xy + _PixelOffset) / float2(width, height)) * 2.0f - 1.0f);
+    float2 uv = (float2(((id.xy) / float2(width, height)) * 2.0f - 1.0f))*2+1;
+    //float2 uv = float2(((id.xy + _PixelOffset) / float2(width, height)) * 2.0f - 1.0f);
 
     // ray cast
     Ray ray = CreateCameraRay(uv);
-    //float r=sqrt(pow(ray.direction.x,2) + pow(ray.direction.y,2) + pow(ray.direction.z,2));
-    // Sample the skybox and write it,
-    // also transform them into correct range
-    //float theta = acos(ray.direction.y/r) / -PI;
-    //float theta = acos(ray.direction.y) / -PI;
-    //float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
-    //Result[id.xy] = _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
 
-    RayHit bestHit;
-    Trace(ray, bestHit, float4(0, 3.0f, 0, 10.0f));
-    float3 result = Shade(ray, bestHit);
+
+    //RayHit bestHit;
+    //Trace(ray, bestHit, float4(0, 3.0f, 0, 10.0f));
+    //float3 result = Shade(ray, bestHit);
+
+    float3 result = float3(0, 0, 0);
+    for (int i = 0; i < 8; i++)
+    {
+        RayHit hit = Trace(ray);
+        result += ray.energy * Shade(ray, hit);
+
+        if (!any(ray.energy)) break;
+    }
+
+
     Result[id.xy] = float4(result, 1);
 }
  
