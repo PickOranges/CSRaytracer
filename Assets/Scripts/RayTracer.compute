@@ -12,7 +12,7 @@ static const float PI = 3.14159265f;
 // This is used for Anti-Aliasing.
 // You'll see the edge is keep jittering.
 float2 _PixelOffset;  
-
+float _SphereOffsetX;
 int _NumSpheres;
 
 
@@ -128,9 +128,10 @@ RayHit Trace(Ray ray)
 
     // Try to check every spheres in the scene, find the nearest hit point.
     uint numSpheres = _NumSpheres;
+    float off=_SphereOffsetX;
     for (uint i = 0; i < numSpheres; i++)
     {
-        IntersectSphere(ray, bestHit, float4(1.0f, 0.0, i*2, 1.5));
+        IntersectSphere(ray, bestHit, float4(i*10+off, 0.0f, 1.0, 3.0));
     }
         
     return bestHit;
@@ -139,7 +140,7 @@ RayHit Trace(Ray ray)
 // not finished yet
 float3 Shade(inout Ray ray, RayHit hit)
 {
-    //return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
+    return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));     // just for test 
     //float3 col= (hit.normal.yyx+float3(1.0f,1.0,1.0))*0.5;
     //return col;
     if (hit.distance < 1.#INF)
@@ -154,15 +155,14 @@ float3 Shade(inout Ray ray, RayHit hit)
         ray.direction = reflect(ray.direction, hit.normal);  // This function is from DX11/HLSL, details see MSDN.
         ray.energy *= specular;
 
-        //return saturate(float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction)) + ray.energy);  
-        return float3(1.0f, 1.0f, 0.5f)*max(0.0f, dot(hit.normal,-ray.direction));      
+        return float3(0.0f, 0.0, 0.0);
     }
     else
     {
         // Erase the ray's energy - the sky doesn't reflect anything
         //ray.energy = 0.0f;
 
-        return float3(0.0f, 0.0f, 0.0f);
+        return float3(0.2f, 0.2f, 0.2f);
         // Sample the skybox and write it
         //float theta = acos(ray.direction.y) / -PI;
         //float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
@@ -177,7 +177,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Result.GetDimensions(width, height);
 
     // Transform pixel to [-1,1] range i.e. into clip space
-    float2 uv = (float2(((id.xy) / float2(width, height)) * 2.0f - 1.0f))*2+1;
+    float2 uv = (float2(((id.xy + float2(0.5, 0.5)) / float2(width, height)) * 2.0f - 1.0f))*2+1;
     //float2 uv = float2(((id.xy + _PixelOffset) / float2(width, height)) * 2.0f - 1.0f);
 
     // ray cast
@@ -209,6 +209,13 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         - But later when we calculate theta and phi, they are both in [0,1].
     2. skybox range why? [-2,0]? [-0.5, 0.5]? 
         - No! Both are in the range [0,1].
+
+
+    01.25.2024
+    1. Why the abnormal distortion?
+    2. Why the spheres are black?
+    3. Add some elements to all of the structs, see the next chapter Material.
+    4. Do the peter shirly if you got some time. Do all three tutorials.
 */
 
 /*
