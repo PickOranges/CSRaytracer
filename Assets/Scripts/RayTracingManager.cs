@@ -24,6 +24,7 @@ public class RayTracingManager : MonoBehaviour
     public Light DirectionalLight;
 
     // send sphere data to GPU
+    [Header("Sphere Generation Settings")]
     public Vector2 SphereRadius = new Vector2(3.0f, 8.0f);
     public uint SpheresMax = 100;
     public float SpherePlacementRadius = 100.0f;
@@ -59,7 +60,7 @@ public class RayTracingManager : MonoBehaviour
     void Start()
     {
         InitRenderTexture();
-
+        SetShaderParameters();
         _shader.SetTexture(0, "Result", _target);
         int groupX = _target.width / 8;
         int groupY = _target.height / 8;
@@ -84,15 +85,6 @@ public class RayTracingManager : MonoBehaviour
         Graphics.Blit(_target, camera.targetTexture);
     }
 
-    void OnCameraRendering(ScriptableRenderContext context, Camera camera)
-    {
-        if (!_target)
-        {
-            Debug.Log("RenderTexture is empty.");
-            return;
-        }
-        Graphics.Blit(_target, camera.targetTexture);
-    }
 
     void InitRenderTexture()
     {
@@ -169,8 +161,8 @@ public class RayTracingManager : MonoBehaviour
             // Albedo and specular color
             Color color = Random.ColorHSV();
             bool metal = Random.value < 0.5f;
-            sphere.albedo = metal ? Vector3.zero : new Vector3(color.r, color.g, color.b);
-            sphere.specular = metal ? new Vector3(color.r, color.g, color.b) : Vector3.one * 0.04f;
+            sphere.albedo = metal ? Vector4.zero : new Vector4(color.r, color.g, color.b);
+            sphere.specular = metal ? new Vector4(color.r, color.g, color.b) : new Vector4(0.04f, 0.04f, 0.04f);
 
             // Add the sphere to the list
             spheres.Add(sphere);
@@ -180,6 +172,8 @@ public class RayTracingManager : MonoBehaviour
         }
 
         // Assign to compute buffer
+        if (_sphereBuffer != null)
+            _sphereBuffer.Release();
         _sphereBuffer = new ComputeBuffer(spheres.Count, 40);
         _sphereBuffer.SetData(spheres);
     }

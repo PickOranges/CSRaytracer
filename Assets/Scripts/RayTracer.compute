@@ -87,6 +87,8 @@ void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
         bestHit.distance = t;
         bestHit.position = ray.origin + t * ray.direction;
         bestHit.normal = float3(0.0f, 1.0f, 0.0f);
+        bestHit.albedo = 0.0f;
+        bestHit.specular = 0.3f;
     }
 
 }
@@ -168,7 +170,7 @@ float3 Shade(inout Ray ray, RayHit hit)
 {
     if (hit.distance < 1.#INF)
     {
-        float3 specular = float3(0.125f,0.125f,0.125f);
+        //float3 specular = float3(0.125f,0.125f,0.125f);
 
         // Reflect the ray and multiply energy with specular reflection
         // the reflected ray's origin. But why the small displacement ???
@@ -176,20 +178,19 @@ float3 Shade(inout Ray ray, RayHit hit)
         // - This is to fix floating point inaccuracy, as it is possible for a reflected ray to be blocked by the surface it is being reflected by.
         ray.origin = hit.position + hit.normal * 0.001f;    
         ray.direction = reflect(ray.direction, hit.normal);  // This function is from DX11/HLSL, details see MSDN.
-        ray.energy*=specular;
+        ray.energy*=hit.specular;
 
 
         // Shadow test ray
-        bool shadow = false;
         Ray shadowRay = CreateRay(hit.position + hit.normal * 0.001f, -1 * _DirectionalLight.xyz);
         RayHit shadowHit = Trace(shadowRay);
         if (shadowHit.distance != 1.#INF) // the traced ray is blocked by something.
         {
-            return float3(0.02f, 0.02f, 0.02f)*saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
+            return float3(0.1f, 0.1f, 0.1f)*saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
+            //return float3(0.0f, 0.0f, 0.0f);
         }
 
 
-        // TODO: replace normal with albedo later
         //return saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.normal;  
         return saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
     }
@@ -201,7 +202,7 @@ float3 Shade(inout Ray ray, RayHit hit)
         // Sample the skybox and write it
         float theta = acos(ray.direction.y) / -PI;
         float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
-        return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
+        return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz*1.8f;
     }
 }
 
