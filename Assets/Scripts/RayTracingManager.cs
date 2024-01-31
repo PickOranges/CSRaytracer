@@ -21,6 +21,16 @@ public class RayTracingManager : MonoBehaviour
     [Range (-500,10)]
     public float _sphereOffsetX=-500;
 
+    public Light DirectionalLight;
+
+    struct Sphere
+    {
+        public Vector3 position;
+        public float radius;
+        public Vector3 albedo;
+        public Vector3 specular;
+    };
+
     private void Awake()
     {
         _camera = GetComponent<Camera>();
@@ -37,6 +47,9 @@ public class RayTracingManager : MonoBehaviour
         _shader.SetVector("_PixelOffset", new Vector2(Random.value, Random.value));  // random range: [0.0, 1.0]
         _shader.SetInt("_NumSpheres", _numSpheres);
         _shader.SetFloat("_SphereOffsetX", _sphereOffsetX);
+
+        Vector3 l = DirectionalLight.transform.forward;  // direction of the directional light source
+        _shader.SetVector("_DirectionalLight", new Vector4(l.x,l.y,l.z, DirectionalLight.intensity));
     }
 
     void Start()
@@ -98,11 +111,11 @@ public class RayTracingManager : MonoBehaviour
         Graphics.Blit(_target, _camera.targetTexture);
 
         // AA
-        //if (transform.hasChanged)
-        //{
-        //    _currentSample = 0;
-        //    transform.hasChanged = false;
-        //}
+        if (transform.hasChanged)
+        {
+            _currentSample = 0;
+            transform.hasChanged = false;
+        }
         //if (_addMaterial == null)
         //    _addMaterial = new Material(Shader.Find("Hidden/AddShader"));
         //_addMaterial.SetFloat("_Sample", _currentSample);
@@ -110,7 +123,7 @@ public class RayTracingManager : MonoBehaviour
         // Add post-processing(i.e. here is anti-aliasing) to the result obtained from ComputeShader, and then
         // copy from tmp texture to camera target, by default is screen.
         //Graphics.Blit(_target, _camera.targetTexture, _addMaterial);
-        //_currentSample++;
+        _currentSample++;
     }
 
 
