@@ -13,17 +13,8 @@ static const float PI = 3.14159265f;
 // You'll see the edge is keep jittering.
 float2 _PixelOffset;  
 float _SphereOffsetX;
-int _NumSpheres;
 
 float4 _DirectionalLight;
-
-struct Sphere
-{
-    float3 position;
-    float radius;
-    float3 albedo;
-    float3 specular;
-};
 
 struct Ray
 {
@@ -100,21 +91,54 @@ void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
 
 }
 
-void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere) // sphere has float3 origin and float radius, thus stored in a float4
+//void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere) // sphere has float3 origin and float radius, thus stored in a float4
+//{
+//    float3 oc=ray.origin-sphere.xyz;
+//    float a=dot(ray.direction,ray.direction);
+//    float b=2.0*dot(oc,ray.direction);
+//    float c=dot(oc,oc)-sphere.w*sphere.w;
+//    float discriminant=b*b-4*a*c;
+//    if(discriminant<0) return;
+    
+//    float t=(-b-sqrt(discriminant))/(2.0*a);
+//    bestHit.position=ray.origin+t*ray.direction;
+//    bestHit.normal=normalize(bestHit.position-sphere.xyz);
+//    float3 d=normalize(bestHit.position-ray.origin);
+    
+//    bestHit.distance=sqrt(dot(d,d));
+//}
+
+// read sphere data sent by CPU
+struct Sphere
 {
-    float3 oc=ray.origin-sphere.xyz;
+    float3 position;
+    float radius;
+    float3 albedo;
+    float3 specular;
+};
+StructuredBuffer<Sphere> _Spheres;
+int _NumSpheres;
+
+void IntersectSphere(Ray ray, inout RayHit bestHit, uint idx) // sphere has float3 origin and float radius, thus stored in a float4
+{
+    Sphere sphere = _Spheres[idx];
+
+    float3 oc=ray.origin-sphere.position;
     float a=dot(ray.direction,ray.direction);
     float b=2.0*dot(oc,ray.direction);
-    float c=dot(oc,oc)-sphere.w*sphere.w;
+    float c=dot(oc,oc)-sphere.radius*sphere.radius;
     float discriminant=b*b-4*a*c;
     if(discriminant<0) return;
     
     float t=(-b-sqrt(discriminant))/(2.0*a);
     bestHit.position=ray.origin+t*ray.direction;
-    bestHit.normal=normalize(bestHit.position-sphere.xyz);
+    bestHit.normal=normalize(bestHit.position-sphere.position);
     float3 d=normalize(bestHit.position-ray.origin);
-    
     bestHit.distance=sqrt(dot(d,d));
+
+    // read data that send by CPU
+    bestHit.albedo=sphere.albedo;
+    bestHit.specular=sphere.specular;
 }
 
 
@@ -126,12 +150,15 @@ RayHit Trace(Ray ray)
     IntersectGroundPlane(ray, bestHit);
 
     // Try to check every spheres in the scene, find the nearest hit point.
+    //uint numSpheres = _NumSpheres;
+    //float off=_SphereOffsetX;
+    //for (uint i = 0; i < numSpheres; i++)
+    //{
+    //    IntersectSphere(ray, bestHit, float4(i*25+off, 0.0f, 400.0, 10.0));
+    //}
     uint numSpheres = _NumSpheres;
-    float off=_SphereOffsetX;
     for (uint i = 0; i < numSpheres; i++)
-    {
-        IntersectSphere(ray, bestHit, float4(i*25+off, 0.0f, 400.0, 10.0));
-    }
+        IntersectSphere(ray, bestHit, i);
         
     return bestHit;
 }
@@ -158,12 +185,13 @@ float3 Shade(inout Ray ray, RayHit hit)
         RayHit shadowHit = Trace(shadowRay);
         if (shadowHit.distance != 1.#INF) // the traced ray is blocked by something.
         {
-            return float3(0.02f, 0.02f, 0.02f)*saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.normal;
+            return float3(0.02f, 0.02f, 0.02f)*saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
         }
 
 
         // TODO: replace normal with albedo later
-        return saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.normal;  
+        //return saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.normal;  
+        return saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
     }
     else
     {
